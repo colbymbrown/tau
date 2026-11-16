@@ -134,6 +134,7 @@ class OpenAICompatibleProviderConfig:
     thinking_parameter: ThinkingParameter | None = None
     thinking_defaults: dict[str, ThinkingLevel] = field(default_factory=dict)
     inference_providers: dict[str, str] = field(default_factory=dict)
+    model_discovery: bool = False
 
     def __post_init__(self) -> None:
         _validate_provider_numbers(
@@ -455,6 +456,7 @@ def provider_config_from_entry(entry: ProviderCatalogEntry) -> ProviderConfig:
         thinking_default=entry.thinking_default,
         thinking_parameter=entry.thinking_parameter,
         thinking_defaults={},
+        model_discovery=entry.model_discovery,
     )
 
 
@@ -1159,6 +1161,8 @@ def _provider_definition_differs_from_catalog(
         return True
     if provider.thinking_default != entry.thinking_default:
         return True
+    if getattr(provider, "model_discovery", False) != entry.model_discovery:
+        return True
     return provider.thinking_parameter != entry.thinking_parameter
 
 
@@ -1191,6 +1195,7 @@ def _catalog_entry_from_provider(
         thinking_models=provider.thinking_models,
         thinking_default=provider.thinking_default,
         thinking_parameter=provider.thinking_parameter,
+        model_discovery=getattr(provider, "model_discovery", False),
     )
 
 

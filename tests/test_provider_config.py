@@ -174,6 +174,9 @@ def test_load_provider_settings_missing_file_uses_openai_default(tmp_path: Path)
         "opencode-go",
         "opencode",
         "github-copilot",
+        "greenpt",
+        "greenpt-us",
+        "viro",
     ]
     assert settings.providers[0].default_model == DEFAULT_MODEL
     assert settings.get_provider("anthropic").api_key_env == "ANTHROPIC_API_KEY"

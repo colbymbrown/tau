@@ -50,6 +50,10 @@ from tau_ai.env import OpenAICompatibleConfig
 from tau_ai.events import AssistantMessageEvent
 from tau_ai.http import create_async_client
 from tau_ai.http_errors import provider_http_error_message
+from tau_ai.model_catalog import (
+    RuntimeModel,
+    RuntimeModelCatalog,
+)
 from tau_ai.openai_cache import is_direct_openai_url, openai_prompt_cache_key
 from tau_ai.provider import CancellationToken
 from tau_ai.retry import (
@@ -95,6 +99,33 @@ class OpenAICompatibleProvider:
         if self._client is not None and self._owns_client:
             await self._client.aclose()
             self._client = None
+
+    async def discover_models(self) -> RuntimeModelCatalog:
+        """Discover the model inventory advertised at ``{base_url}/models``.
+
+        Mirrors the auth resolution used for streaming requests (credential
+        resolver may override the key, headers, and base URL). Raises on HTTP
+        errors, malformed payloads, or an empty list so callers can fall back
+        to the static catalog.
+        """
+        client = self._get_client()
+        api_key = self._config.api_key
+        request_url = f"{self._config.base_url.rstrip('/')}/models"
+        headers = dict(self._config.headers or {})
+        if self._config.credential_resolver is not None:
+            auth = await self._config.credential_resolver()
+            api_key = auth.api_key
+            headers.update(auth.headers or {})
+            if auth.base_url is not None:
+                request_url = f"{auth.base_url.rstrip('/')}/models"
+        if not self._config.omit_authorization_header:
+            has_authorization = any(key.casefold() == "authorization" for key in headers)
+            if not has_authorization:
+                headers["Authorization"] = f"Bearer {api_key}"
+        response = await client.get(request_url, headers=headers)
+        if response.status_code >= 400:
+            response.raise_for_status()
+        return _parse_discovered_models(response.json())
 
     def stream_response(
         self,
@@ -410,6 +441,26 @@ class OpenAICompatibleProvider:
         if attempt >= self._config.max_retries:
             return False
         return status_code is None or _is_transient_status(status_code)
+
+
+def _parse_discovered_models(payload: object) -> RuntimeModelCatalog:
+    """Parse a standard OpenAI ``GET /v1/models`` payload into a model catalog."""
+    if not isinstance(payload, Mapping):
+        raise ValueError("model discovery returned a non-object payload")
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise ValueError("model discovery payload has no data list")
+    models: dict[str, RuntimeModel] = {}
+    for item in data:
+        if not isinstance(item, Mapping):
+            continue
+        model_id = item.get("id")
+        if not isinstance(model_id, str) or not model_id or model_id in models:
+            continue
+        models[model_id] = RuntimeModel(id=model_id, name=model_id, input_modalities=("text",))
+    if not models:
+        raise ValueError("model discovery returned no models")
+    return RuntimeModelCatalog(tuple(models.values()))
 
 
 def _response_header_value(response: httpx.Response, header_name: str | None) -> str | None:

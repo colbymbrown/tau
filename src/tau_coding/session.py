@@ -2385,6 +2385,22 @@ class CodingSession:
         self._runtime_model_limits_key = None
         self._model_limits_discovery_error = None
 
+    def _model_discovery_enabled(self, provider_name: str) -> bool:
+        """Return whether a provider opts into runtime model discovery.
+
+        Codex discovers its account inventory by design; openai-compatible
+        providers opt in through the catalog's ``model_discovery`` flag.
+        """
+        if provider_name == "openai-codex":
+            return True
+        if self._durable_provider_settings is None:
+            return False
+        try:
+            provider = self._durable_provider_settings.get_provider(provider_name)
+        except ProviderConfigError:
+            return False
+        return bool(getattr(provider, "model_discovery", False))
+
     async def _refresh_runtime_model_limits(self) -> None:
         key = (self.provider_name, self.model)
         if self._runtime_model_limits_key == key:
@@ -2393,19 +2409,20 @@ class CodingSession:
         self._runtime_model_limits_key = key
         self._model_limits_discovery_error = None
         provider = self._harness.config.provider
+        discovery_enabled = self._model_discovery_enabled(self.provider_name)
         if (
-            self.provider_name == "openai-codex"
+            discovery_enabled
             and isinstance(provider, ModelCatalogProvider)
             and environ.get("TAU_OFFLINE") is not None
         ):
             return
         try:
             cached_catalog = self._runtime_model_catalogs.get(self.provider_name)
-            if self.provider_name == "openai-codex" and cached_catalog is not None:
+            if cached_catalog is not None:
                 model = cached_catalog.model(self.model)
                 self._runtime_model_limits = model.limits if model is not None else None
                 return
-            if isinstance(provider, ModelCatalogProvider):
+            if discovery_enabled and isinstance(provider, ModelCatalogProvider):
                 catalog = await provider.discover_models()
                 self._publish_runtime_model_catalog(self.provider_name, catalog)
                 if self.provider_name == "openai-codex":
@@ -5109,7 +5126,9 @@ def _provider_with_runtime_model_catalog(
     catalog: RuntimeModelCatalog | None,
 ) -> ProviderConfig:
     """Overlay one account-specific catalog without changing durable settings."""
-    if catalog is None or not isinstance(provider, OpenAICodexProviderConfig):
+    if catalog is None or not isinstance(
+        provider, (OpenAICodexProviderConfig, OpenAICompatibleProviderConfig)
+    ):
         return provider
 
     models = tuple(model.id for model in catalog.models)
@@ -5137,7 +5156,7 @@ def _provider_with_runtime_model_catalog(
 
 
 def _runtime_model_thinking_defaults(
-    provider: OpenAICodexProviderConfig,
+    provider: OpenAICodexProviderConfig | OpenAICompatibleProviderConfig,
     catalog: RuntimeModelCatalog,
 ) -> dict[str, ThinkingLevel]:
     defaults: dict[str, ThinkingLevel] = {}
@@ -5149,7 +5168,7 @@ def _runtime_model_thinking_defaults(
 
 
 def _runtime_provider_model_metadata(
-    provider: OpenAICodexProviderConfig,
+    provider: OpenAICodexProviderConfig | OpenAICompatibleProviderConfig,
     model: RuntimeModel,
 ) -> ProviderModelMetadata:
     existing = provider.model_metadata.get(model.id, ProviderModelMetadata())

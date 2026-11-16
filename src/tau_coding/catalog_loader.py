@@ -110,6 +110,7 @@ class _CatalogProvider(BaseModel):
     thinking_parameter: ThinkingParameter | None = None
     removed_models: tuple[_NonEmptyString, ...] = ()
     auth_methods: tuple[AuthMethod, ...] = ("api_key",)
+    model_discovery: bool = False
 
 
 class _CatalogFile(BaseModel):
@@ -513,6 +514,7 @@ def _entry_from_provider(provider: _CatalogProvider, *, source: str) -> Provider
         thinking_parameter=provider.thinking_parameter,
         removed_models=provider.removed_models,
         auth_methods=provider.auth_methods,
+        model_discovery=provider.model_discovery,
     )
 
 
@@ -655,6 +657,8 @@ def _raw_provider_from_entry(entry: ProviderCatalogEntry) -> dict[str, Any]:
         raw["removed_models"] = list(entry.removed_models)
     if entry.auth_methods != ("api_key",):
         raw["auth_methods"] = list(entry.auth_methods)
+    if entry.model_discovery:
+        raw["model_discovery"] = True
     return raw
 
 

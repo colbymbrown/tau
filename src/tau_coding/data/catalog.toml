@@ -6880,3 +6880,79 @@ input = ["text", "image"]
 
 [providers.model_metadata."mai-code-1-flash-picker"]
 input = ["text"]
+
+[[providers]]
+name = "greenpt"
+display_name = "GreenPT"
+kind = "openai-compatible"
+base_url = "https://api.greenpt.ai/v1"
+api_key_env = "GREENPT_API_KEY"
+credential_name = "greenpt"
+models = ["deepseek-v4-flash-0731", "deepseek-v4.1-flash", "deepseek-v4.1-flash-1017", "devstral-2-123b-instruct-2512", "gemma-3-27b-it", "gemma4", "glm-5.1", "glm-5.2", "glm-5.2-caveman", "glm-5.2-caveman-lite", "glm-5.2-caveman-ultra", "glm-5.2-honey", "glm-5.2-honey-lite", "glm-5.2-honey-ultra", "glm-5.2-ponytail", "glm-5.2-ponytail-lite", "glm-5.2-ponytail-ultra", "glm-5.3", "glm-5.3-flash", "gpt-oss-120b", "green-l", "green-l-raw", "green-r", "green-r-raw", "green-s", "green-s-pro", "holo2-30b-a3b", "kimi-k2.6", "kimi-k2.6-fast", "kimi-k2.7-code", "kimi-k3", "llama-3.3-70b-instruct", "minimax-m2.5", "mistral-medium-3.5-128b", "mistral-small-3.2-24b-instruct-2506", "pixtral-12b-2409", "qwen3-235b-a22b-instruct-2507", "qwen3-coder-30b-a3b-instruct", "qwen3.5-397b-a17b", "qwen3.6-35b-a3b", "voxtral-small-24b-2507"]
+default_model = "deepseek-v4.1-flash"
+docs_url = "https://docs.greenpt.ai"
+api = "openai-completions"
+thinking_levels = ["off", "minimal", "low", "medium", "high"]
+thinking_default = "off"
+thinking_parameter = "reasoning_effort"
+model_discovery = true
+
+[[providers]]
+name = "greenpt-us"
+display_name = "GreenPT US"
+kind = "openai-compatible"
+base_url = "https://api.us.greenpt.ai/v1"
+api_key_env = "GREENPT_API_KEY"
+credential_name = "greenpt-us"
+models = ["deepseek-v4.1-flash", "glm-5.3-flash", "glm-5.3", "kimi-k3"]
+default_model = "glm-5.3"
+docs_url = "https://docs.greenpt.ai/regions"
+api = "openai-completions"
+thinking_levels = ["off", "minimal", "low", "medium", "high"]
+thinking_default = "off"
+thinking_parameter = "reasoning_effort"
+model_discovery = true
+
+[providers.context_windows]
+"deepseek-v4.1-flash" = 1000000
+"glm-5.3-flash" = 1000000
+"glm-5.3" = 1000000
+"kimi-k3" = 1000000
+
+[[providers]]
+name = "viro"
+display_name = "Viro AI"
+kind = "openai-compatible"
+base_url = "https://api.viro.app/v1"
+api_key_env = "VIRO_API_KEY"
+credential_name = "viro"
+models = ["viro/apertus-v1.5-70b", "viro/deepseek-v4-flash-0731", "viro/deepseek-v4-pro", "viro/deepseek-v4.1-flash", "viro/deepseek-v4.1-flash-1017", "viro/gemma-4-31b", "viro/glm-5.2", "viro/glm-5.3", "viro/glm-5.3-flash", "viro/gpt-oss-120b", "viro/gpt-oss-20b", "viro/kimi-k2.5", "viro/kimi-k2.7-code", "viro/kimi-k3", "viro/minimax-m3", "viro/mistral-small-3.2", "viro/mistral-small-4", "viro/qwen3.5-122b", "viro/qwen3.5-397b", "viro/qwen3.8-27b"]
+default_model = "viro/deepseek-v4.1-flash"
+docs_url = "https://ai.viro.app"
+api = "openai-completions"
+thinking_levels = ["off", "minimal", "low", "medium", "high"]
+thinking_default = "off"
+thinking_parameter = "reasoning_effort"
+model_discovery = true
+
+[providers.context_windows]
+"viro/apertus-v1.5-70b" = 100000
+"viro/deepseek-v4-flash-0731" = 1000000
+"viro/deepseek-v4-pro" = 1000000
+"viro/deepseek-v4.1-flash" = 1000000
+"viro/deepseek-v4.1-flash-1017" = 1000000
+"viro/gemma-4-31b" = 256000
+"viro/glm-5.2" = 1000000
+"viro/glm-5.3" = 1000000
+"viro/glm-5.3-flash" = 1000000
+"viro/gpt-oss-120b" = 131072
+"viro/gpt-oss-20b" = 131072
+"viro/kimi-k2.5" = 262144
+"viro/kimi-k2.7-code" = 262144
+"viro/kimi-k3" = 1000000
+"viro/minimax-m3" = 256000
+"viro/mistral-small-3.2" = 131072
+"viro/mistral-small-4" = 262144
+"viro/qwen3.5-122b" = 262000
+"viro/qwen3.5-397b" = 256000
+"viro/qwen3.8-27b" = 262144
