@@ -480,7 +480,7 @@ class LocalBackendScreen(ModalScreen[None]):
             "search_models": "Search Hugging Face models",
         }
         placeholders = {
-            "download_model": "owner/repository[:quantization]",
+            "download_model": "model name or owner/repository",
             "search_models": "Hugging Face model ID or search query",
         }
         if action not in labels:
@@ -837,7 +837,7 @@ class LocalBackendScreen(ModalScreen[None]):
 
         action_labels = (
             ("search_models", "Search Hugging Face models…"),
-            ("download_model", "Download an exact Hugging Face model…"),
+            ("download_model", "Download a model…"),
             ("configure", "Configure connection…"),
             ("refresh", "Refresh server state"),
             ("doctor", "Run Doctor"),
