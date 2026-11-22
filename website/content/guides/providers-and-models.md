@@ -28,6 +28,10 @@ tau
 /login custom       # add an OpenAI-compatible custom provider
 ```
 
+The bare `/login` picker also offers **Local server** templates (Ollama, LM
+Studio, vLLM, Unsloth, llama.cpp server) — see
+[Local server login templates](#local-server-login-templates).
+
 Built-in providers include **OpenAI**, **Anthropic**, **OpenAI Codex**
 (subscription), **GitHub Copilot**, **OpenCode Go**, **OpenCode Zen**,
 **Moonshot AI (Kimi)**, **Kimi Code** (subscription), **OpenRouter**, **Hugging Face**,
@@ -455,6 +459,36 @@ Ollama. The easiest interactive path is:
 Tau prompts for the provider details, saves the API key, writes the provider
 metadata to `~/.tau/catalog.toml`, and makes the provider available immediately.
 
+### Local server login templates
+
+For a keyless local OpenAI-compatible server, `/login` → **Local server** lists
+templates with the default endpoint already filled in:
+
+| Template | Default endpoint |
+| --- | --- |
+| Ollama | `http://127.0.0.1:11434/v1` |
+| LM Studio | `http://127.0.0.1:1234/v1` |
+| vLLM | `http://127.0.0.1:8000/v1` |
+| Unsloth | `http://127.0.0.1:8000/v1` |
+| llama.cpp server | `http://127.0.0.1:8080/v1` |
+
+Each template opens the OpenAI-compatible provider form pre-filled with the
+endpoint and an API-key variable. The API key is optional: with no key Tau sends
+no `Authorization` header (the same behavior as the built-in `llama.cpp`
+backend), and a saved key is used when present.
+
+Leave the model field blank to discover the served models from
+`{base_url}/models` when you save. Tau seeds the provider with the discovered
+list and selects the first model; use `/model` to switch. If discovery fails
+(server down, or a non-standard surface) the form asks for one model ID instead.
+
+These templates configure Tau's existing OpenAI-compatible provider; they do not
+add a managed backend. Tau never installs, starts, stops, or scans the server,
+and there is no model download/load/unload management — that remains specific to
+the built-in `llama.cpp` backend. For `llama.cpp`, prefer `/local` when you want
+router management; the **llama.cpp server** template is for a plain
+OpenAI-compatible `llama-server` you manage yourself.
+
 ### Built-in llama.cpp backend
 
 Tau's first-class llama.cpp integration is configured through the provider-neutral
@@ -501,8 +535,9 @@ for endpoint precedence, Doctor, reset, and troubleshooting.
 
 An older manually configured provider named `llama-cpp` remains separate and is
 not migrated. Configure the built-in `llama.cpp` layer through `/local`, and use
-the custom-provider flow below for Ollama and other OpenAI-compatible servers.
-Tau does not ship an Ollama backend.
+the **Local server** template (`/login` → Local server) or the custom-provider
+flow below for Ollama and other OpenAI-compatible servers. Tau does not ship a
+managed Ollama backend.
 
 For scripted or one-off setup with another OpenAI-compatible server, use the
 same `tau setup` flow. For example, Ollama's OpenAI-compatible endpoint usually
@@ -593,5 +628,6 @@ models, see [Configuration](/reference/configuration/#providers).
 For a given provider, Tau uses, in order: a stored credential in
 `~/.tau/credentials.json`, then the environment variable named by the provider's
 `api_key_env`. OAuth credentials are refreshed immediately before a request and
-the replacement is saved atomically. Use `/login` for built-in providers or
-`/login custom` for OpenAI-compatible custom providers.
+the replacement is saved atomically. Use `/login` for built-in providers,
+`/login custom` for OpenAI-compatible custom providers, or the **Local server**
+template for a keyless local endpoint.

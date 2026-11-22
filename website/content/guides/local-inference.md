@@ -264,8 +264,8 @@ manually configured llama.cpp server to the built-in integration, open
 optional key, then use the exact ID returned by `/v1/models`. The built-in
 provider ID is `llama.cpp`; an older `llama-cpp` catalog entry is not migrated,
 rewritten, or removed automatically. Remove it only after verifying the new
-session. Ollama and other local servers remain on the custom-provider path and
-are not shipped Tau backends.
+session. Ollama and other local servers remain on the custom-provider path or
+the **Local server** login templates and are not Tau-managed backends.
 
 Tau never copies old fake keys, fake model IDs, catalog definitions, project
 settings, or environment endpoints into built-in state. Reset removes only

@@ -32,6 +32,9 @@ User-facing documentation lives in `website/content/` and is published at
   generation, offline fallback, and snapshot refresh workflow.
 - `llama-cpp-phase-5.md` — built-in llama.cpp connection, safe state, `/local`,
   failure handling, and Phase 5 validation.
+- `local-server-providers.md` — keyless OpenAI-compatible login templates
+  (`/login` → Local server), the optional-API-key flag, and on-save model
+  discovery.
 - `architecture/phase-6-local-inference-hardening.md` — second-backend contract
   validation, lifecycle hardening, migration, and security decisions.
 - `tui-latency-fixes.md` — profiled causes of slow prompt echo and startup, and

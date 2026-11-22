@@ -111,6 +111,7 @@ class _CatalogProvider(BaseModel):
     removed_models: tuple[_NonEmptyString, ...] = ()
     auth_methods: tuple[AuthMethod, ...] = ("api_key",)
     model_discovery: bool = False
+    require_api_key: bool = True
 
 
 class _CatalogFile(BaseModel):
@@ -515,6 +516,7 @@ def _entry_from_provider(provider: _CatalogProvider, *, source: str) -> Provider
         removed_models=provider.removed_models,
         auth_methods=provider.auth_methods,
         model_discovery=provider.model_discovery,
+        require_api_key=provider.require_api_key,
     )
 
 
@@ -659,6 +661,8 @@ def _raw_provider_from_entry(entry: ProviderCatalogEntry) -> dict[str, Any]:
         raw["auth_methods"] = list(entry.auth_methods)
     if entry.model_discovery:
         raw["model_discovery"] = True
+    if not entry.require_api_key:
+        raw["require_api_key"] = False
     return raw
 
 
@@ -730,6 +734,8 @@ def _catalog_to_toml(raw: dict[str, Any]) -> str:
             "thinking_parameter",
             "removed_models",
             "auth_methods",
+            "model_discovery",
+            "require_api_key",
         ):
             if key in provider:
                 lines.append(f"{key} = {_toml_value(provider[key])}")

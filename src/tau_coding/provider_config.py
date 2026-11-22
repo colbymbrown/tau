@@ -135,6 +135,7 @@ class OpenAICompatibleProviderConfig:
     thinking_defaults: dict[str, ThinkingLevel] = field(default_factory=dict)
     inference_providers: dict[str, str] = field(default_factory=dict)
     model_discovery: bool = False
+    require_api_key: bool = True
 
     def __post_init__(self) -> None:
         _validate_provider_numbers(
@@ -457,6 +458,7 @@ def provider_config_from_entry(entry: ProviderCatalogEntry) -> ProviderConfig:
         thinking_parameter=entry.thinking_parameter,
         thinking_defaults={},
         model_discovery=entry.model_discovery,
+        require_api_key=entry.require_api_key,
     )
 
 
@@ -1163,6 +1165,8 @@ def _provider_definition_differs_from_catalog(
         return True
     if getattr(provider, "model_discovery", False) != entry.model_discovery:
         return True
+    if getattr(provider, "require_api_key", True) != entry.require_api_key:
+        return True
     return provider.thinking_parameter != entry.thinking_parameter
 
 
@@ -1196,6 +1200,7 @@ def _catalog_entry_from_provider(
         thinking_default=provider.thinking_default,
         thinking_parameter=provider.thinking_parameter,
         model_discovery=getattr(provider, "model_discovery", False),
+        require_api_key=getattr(provider, "require_api_key", True),
     )
 
 
@@ -1738,7 +1743,11 @@ def openai_compatible_config_from_provider(
     thinking_level: ThinkingLevel | None = None,
 ) -> OpenAICompatibleConfig:
     """Build OpenAI-compatible runtime config from durable settings."""
-    api_key = _api_key_from_provider(provider, credential_reader=credential_reader)
+    api_key = _api_key_from_provider(
+        provider,
+        credential_reader=credential_reader,
+        required=provider.require_api_key,
+    )
     selected_model = model or provider.default_model
     base_url = _model_base_url(provider, selected_model)
     if provider.name == DEFAULT_PROVIDER_NAME and provider.api_key_env == "OPENAI_API_KEY":
@@ -1771,6 +1780,9 @@ def openai_compatible_config_from_provider(
             model=selected_model,
             thinking_level=thinking_level,
         ),
+        # A keyless provider (e.g. a local OpenAI-compatible server) must not
+        # advertise an empty bearer token that some servers reject.
+        omit_authorization_header=not provider.require_api_key and not api_key,
     )
 
 
@@ -2148,6 +2160,7 @@ def _api_key_from_provider(
     provider: ProviderConfig,
     *,
     credential_reader: CredentialReader | None,
+    required: bool = True,
 ) -> str:
     if provider.credential_name and credential_reader is not None:
         credential = credential_reader.get(provider.credential_name)
@@ -2164,6 +2177,8 @@ def _api_key_from_provider(
     api_key = environ.get(provider.api_key_env)
     if api_key:
         return api_key
+    if not required:
+        return ""
     credential_hint = f" or run /login {provider.name}" if provider.credential_name else ""
     raise RuntimeError(f"Missing provider API key. Set {provider.api_key_env}{credential_hint}.")
 

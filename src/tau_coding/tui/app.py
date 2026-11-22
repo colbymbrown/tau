@@ -74,6 +74,7 @@ from tau_agent.provider_events import (
 )
 from tau_agent.tools import AgentTool
 from tau_agent.types import JSONValue
+from tau_ai.model_catalog import ModelCatalogProvider
 from tau_coding.catalog_loader import save_user_catalog_entries
 from tau_coding.commands import (
     LOGIN_PROVIDER_ALIASES,
@@ -99,6 +100,7 @@ from tau_coding.extensions.api import (
     SlotWidgetContent,
     SlotWidgetFactory,
 )
+from tau_coding.local_server_presets import LOCAL_SERVER_PRESETS, LocalServerPreset
 from tau_coding.oauth import login_openai_codex
 from tau_coding.oauth_registry import get_oauth_provider, oauth_provider_ids
 from tau_coding.oauth_types import (
@@ -2905,6 +2907,8 @@ class CustomProviderLoginResult:
     models: tuple[str, ...]
     default_model: str
     api_key: str
+    model_discovery: bool = False
+    require_api_key: bool = True
 
 
 class LoginMethodPickerScreen(ModalScreen[str | None]):
@@ -2940,6 +2944,10 @@ class LoginMethodPickerScreen(ModalScreen[str | None]):
                     Label("Custom provider — OpenAI-compatible", markup=False),
                     id="login-method-custom",
                 ),
+                ListItem(
+                    Label("Local server — keyless OpenAI-compatible", markup=False),
+                    id="login-method-local",
+                ),
                 id="login-method-list",
             )
             yield Static("Enter selects - Escape/Ctrl+D closes", id="login-method-help")
@@ -2970,6 +2978,8 @@ class LoginMethodPickerScreen(ModalScreen[str | None]):
             self.dismiss("api-key")
         elif event.button.id == "login-method-custom":
             self.dismiss("custom")
+        elif event.button.id == "login-method-local":
+            self.dismiss("local")
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Dismiss with the selected login method."""
@@ -2979,6 +2989,8 @@ class LoginMethodPickerScreen(ModalScreen[str | None]):
             self.dismiss("api-key")
         elif event.item.id == "login-method-custom":
             self.dismiss("custom")
+        elif event.item.id == "login-method-local":
+            self.dismiss("local")
 
     def action_cancel(self) -> None:
         """Close without selecting a login method."""
@@ -3024,6 +3036,63 @@ class LoginMethodListView(ListView):
             return
         current_index = self.index if self.index is not None else 0
         self.index = (current_index + offset) % item_count
+
+
+class LocalServerPresetScreen(ModalScreen[LocalServerPreset | _LoginFlowAction | None]):
+    """Preset picker for keyless OpenAI-compatible local servers."""
+
+    BINDINGS: ClassVar[list[BindingEntry]] = [
+        Binding("escape", "cancel", "Cancel", priority=True),
+        Binding("ctrl+d", "cancel", "Close", priority=True),
+    ]
+
+    def __init__(self, *, theme: TuiTheme) -> None:
+        super().__init__()
+        self.theme = theme
+
+    def compose(self) -> ComposeResult:
+        """Compose the local server preset list."""
+        with Vertical(id="login-provider-picker"):
+            yield Static("Local server", id="login-provider-title")
+            yield Static(
+                "Pick a template; Tau fills in the default endpoint. "
+                "Tau never starts or scans the server.",
+                id="login-method-intro",
+            )
+            yield ListView(
+                *[
+                    ListItem(
+                        Label(
+                            f"{preset.display_name} — {preset.base_url}",
+                            markup=False,
+                        )
+                    )
+                    for preset in LOCAL_SERVER_PRESETS
+                ],
+                id="login-provider-list",
+            )
+            yield Static("Enter selects - Escape goes back", id="login-provider-help")
+
+    def on_mount(self) -> None:
+        """Focus the first preset."""
+        preset_list = self.query_one("#login-provider-list", ListView)
+        preset_list.index = 0
+        preset_list.focus()
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Dismiss with the selected preset."""
+        event.stop()
+        self._select_preset()
+
+    def action_cancel(self) -> None:
+        """Return to the login method picker."""
+        self.dismiss(_LoginFlowAction.BACK)
+
+    def _select_preset(self) -> None:
+        preset_list = self.query_one("#login-provider-list", ListView)
+        if preset_list.index is None:
+            return
+        self.dismiss(LOCAL_SERVER_PRESETS[preset_list.index])
 
 
 class ThemePickerScreen(ModalScreen[TuiThemeName | None]):
@@ -3432,18 +3501,40 @@ class CustomProviderLoginScreen(ModalScreen[CustomProviderLoginResult | _LoginFl
         "custom-provider-api-key",
     )
 
-    def __init__(self, *, theme: TuiTheme) -> None:
+    def __init__(self, *, theme: TuiTheme, preset: LocalServerPreset | None = None) -> None:
         super().__init__()
         self.theme = theme
+        self.preset = preset
+        self.local_mode = preset is not None
+        self._discovering = False
 
     def compose(self) -> ComposeResult:
-        """Compose the custom provider prompt."""
+        """Compose the custom or local-server provider prompt."""
+        is_local = self.local_mode
+        title = (
+            f"Add {self.preset.display_name} — local server"
+            if self.preset is not None
+            else "Add custom provider"
+        )
+        intro = (
+            "Keyless OpenAI-compatible server. Tau fills the default endpoint; "
+            "leave models blank to discover them."
+            if is_local
+            else "Short provider name is used in commands/config."
+        )
+        models_placeholder = (
+            "Model ids, comma-separated — leave blank to auto-discover"
+            if is_local
+            else "Model ids, comma-separated, e.g. model-a, model-b"
+        )
+        key_placeholder = (
+            "Optional API key to save (many local servers need none)"
+            if is_local
+            else "Paste API key to save for this provider"
+        )
         with Vertical(id="login-screen"):
-            yield Static("Add custom provider", id="login-title")
-            yield Static(
-                "Short provider name is used in commands/config.",
-                id="custom-provider-help",
-            )
+            yield Static(title, id="login-title")
+            yield Static(intro, id="custom-provider-help")
             yield Input(placeholder="Provider name/id, e.g. nebius", id="custom-provider-name")
             yield Input(
                 placeholder="Display name shown in UI, e.g. Nebius AI Studio",
@@ -3457,16 +3548,13 @@ class CustomProviderLoginScreen(ModalScreen[CustomProviderLoginResult | _LoginFl
                 placeholder="API key environment variable fallback, e.g. NEBIUS_API_KEY",
                 id="custom-provider-api-key-env",
             )
-            yield Input(
-                placeholder="Model ids, comma-separated, e.g. model-a, model-b",
-                id="custom-provider-models",
-            )
+            yield Input(placeholder=models_placeholder, id="custom-provider-models")
             yield Input(
                 placeholder="Default model id, must be listed above",
                 id="custom-provider-default-model",
             )
             yield Input(
-                placeholder="Paste API key to save for this provider",
+                placeholder=key_placeholder,
                 password=True,
                 id="custom-provider-api-key",
             )
@@ -3476,11 +3564,18 @@ class CustomProviderLoginScreen(ModalScreen[CustomProviderLoginResult | _LoginFl
             )
 
     def on_mount(self) -> None:
-        """Focus the first provider-detail field."""
+        """Pre-fill a preset, then focus the first field worth reviewing."""
+        if self.preset is not None:
+            self.query_one("#custom-provider-name", Input).value = self.preset.name
+            self.query_one("#custom-provider-display-name", Input).value = self.preset.display_name
+            self.query_one("#custom-provider-base-url", Input).value = self.preset.base_url
+            self.query_one("#custom-provider-api-key-env", Input).value = self.preset.api_key_env
+            self.query_one("#custom-provider-base-url", Input).focus()
+            return
         self.query_one("#custom-provider-name", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Advance through fields, then dismiss with provider details."""
+        """Advance through fields, then save or discover models."""
         input_id = event.input.id
         if input_id not in self._INPUT_ORDER:
             return
@@ -3488,13 +3583,23 @@ class CustomProviderLoginScreen(ModalScreen[CustomProviderLoginResult | _LoginFl
         if input_id != self._INPUT_ORDER[-1]:
             self._focus_next(input_id)
             return
-        result = self._collect_result()
-        if result is not None:
-            self.dismiss(result)
+        self._submit()
 
     def _focus_next(self, input_id: str) -> None:
         index = self._INPUT_ORDER.index(input_id)
         self.query_one(f"#{self._INPUT_ORDER[index + 1]}", Input).focus()
+
+    def _submit(self) -> None:
+        if self._discovering:
+            return
+        result = self._collect_result()
+        if result is None:
+            return
+        if self.local_mode and not result.models:
+            self._discovering = True
+            self.run_worker(self._discover_models(result), exclusive=True)
+            return
+        self.dismiss(result)
 
     def _collect_result(self) -> CustomProviderLoginResult | None:
         provider_name = self._field("custom-provider-name", "Provider name")
@@ -3503,32 +3608,34 @@ class CustomProviderLoginScreen(ModalScreen[CustomProviderLoginResult | _LoginFl
         base_url = self._field("custom-provider-base-url", "Base URL")
         if base_url is None:
             return None
-        api_key_env = self._field("custom-provider-api-key-env", "API key environment variable")
-        if api_key_env is None:
-            return None
-        models_text = self._field("custom-provider-models", "Model ids")
-        if models_text is None:
-            return None
+        api_key_env = self.query_one("#custom-provider-api-key-env", Input).value.strip()
+        if not api_key_env:
+            if not self.local_mode:
+                self._show_error("API key environment variable is required.")
+                self.query_one("#custom-provider-api-key-env", Input).focus()
+                return None
+            api_key_env = _derived_api_key_env(provider_name)
+        models_text = self.query_one("#custom-provider-models", Input).value.strip()
         models = tuple(
             dict.fromkeys(item.strip() for item in models_text.split(",") if item.strip())
         )
-        if not models:
-            self.query_one("#custom-provider-help", Static).update(
-                "At least one model id is required."
-            )
+        default_model = self.query_one("#custom-provider-default-model", Input).value.strip()
+        if models:
+            if not default_model:
+                default_model = models[0]
+            if default_model not in models:
+                self._show_error("Default model must be included in the model list.")
+                self.query_one("#custom-provider-default-model", Input).focus()
+                return None
+        elif not self.local_mode:
+            self._show_error("At least one model id is required.")
             self.query_one("#custom-provider-models", Input).focus()
             return None
-        default_model = self._field("custom-provider-default-model", "Default model")
-        if default_model is None:
-            return None
-        if default_model not in models:
-            self.query_one("#custom-provider-help", Static).update(
-                "Default model must be included in the model list."
-            )
-            self.query_one("#custom-provider-default-model", Input).focus()
-            return None
-        api_key = self._field("custom-provider-api-key", "API key")
-        if api_key is None:
+        # A local server may leave models blank: discovery fills them in.
+        api_key = self.query_one("#custom-provider-api-key", Input).value.strip()
+        if not api_key and not self.local_mode:
+            self._show_error("API key is required.")
+            self.query_one("#custom-provider-api-key", Input).focus()
             return None
         display_name = self.query_one("#custom-provider-display-name", Input).value.strip()
         return CustomProviderLoginResult(
@@ -3539,15 +3646,58 @@ class CustomProviderLoginScreen(ModalScreen[CustomProviderLoginResult | _LoginFl
             models=models,
             default_model=default_model,
             api_key=api_key,
+            model_discovery=self.local_mode,
+            require_api_key=not self.local_mode,
         )
+
+    async def _discover_models(self, result: CustomProviderLoginResult) -> None:
+        """Probe a local server's ``/v1/models`` and use the first model as default."""
+        self._show_error(f"Discovering models from {result.base_url} ...")
+        provider = None
+        try:
+            config = OpenAICompatibleProviderConfig(
+                name=result.provider_name,
+                base_url=result.base_url,
+                api_key_env=result.api_key_env,
+                credential_name=result.provider_name,
+                models=(result.provider_name,),
+                default_model=result.provider_name,
+                model_discovery=True,
+                require_api_key=False,
+            )
+            provider = create_model_provider(config)
+            if not isinstance(provider, ModelCatalogProvider):
+                raise RuntimeError("this server does not support model discovery")
+            catalog = await provider.discover_models()
+            models = tuple(model.id for model in catalog.models)
+        except Exception as exc:  # noqa: BLE001 - surface discovery failures in the form
+            self._discovering = False
+            self._show_error(
+                f"Could not discover models at {result.base_url}: {exc}. Enter a model id below."
+            )
+            self.query_one("#custom-provider-models", Input).focus()
+            return
+        finally:
+            if provider is not None:
+                with suppress(Exception):
+                    await provider.aclose()
+        if not models:
+            self._discovering = False
+            self._show_error(f"No models reported by {result.base_url}. Enter a model id below.")
+            self.query_one("#custom-provider-models", Input).focus()
+            return
+        self.dismiss(replace(result, models=models, default_model=models[0]))
 
     def _field(self, input_id: str, label: str) -> str | None:
         value = self.query_one(f"#{input_id}", Input).value.strip()
         if value:
             return value
-        self.query_one("#custom-provider-help", Static).update(f"{label} is required.")
+        self._show_error(f"{label} is required.")
         self.query_one(f"#{input_id}", Input).focus()
         return None
+
+    def _show_error(self, message: str) -> None:
+        self.query_one("#custom-provider-help", Static).update(message)
 
     def action_back(self) -> None:
         """Return to the login method picker."""
@@ -4443,6 +4593,7 @@ class TauTuiApp(App[None]):
 
     LoginMethodPickerScreen,
     LoginProviderPickerScreen,
+    LocalServerPresetScreen,
     ThemePickerScreen,
     ModelPickerScreen {
         align: center middle;
@@ -7187,6 +7338,9 @@ class TauTuiApp(App[None]):
         elif method == "custom":
             self._open_custom_provider_login()
             return
+        elif method == "local":
+            self._open_local_server_presets()
+            return
         else:
             self._notify(f"Unknown login method: {method}", severity="error")
             return
@@ -7216,9 +7370,24 @@ class TauTuiApp(App[None]):
         elif provider_name is not None:
             self._open_login(provider_name, method=method)
 
-    def _open_custom_provider_login(self) -> None:
+    def _open_local_server_presets(self) -> None:
         self.push_screen(
-            CustomProviderLoginScreen(theme=self.tui_settings.resolved_theme),
+            LocalServerPresetScreen(theme=self.tui_settings.resolved_theme),
+            callback=self._handle_local_server_preset_result,
+        )
+
+    def _handle_local_server_preset_result(
+        self,
+        preset: LocalServerPreset | _LoginFlowAction | None,
+    ) -> None:
+        if preset is _LoginFlowAction.BACK:
+            self._open_login_picker()
+        elif preset is not None:
+            self._open_custom_provider_login(preset=preset)
+
+    def _open_custom_provider_login(self, *, preset: LocalServerPreset | None = None) -> None:
+        self.push_screen(
+            CustomProviderLoginScreen(theme=self.tui_settings.resolved_theme, preset=preset),
             callback=self._handle_custom_provider_login_result,
         )
 
@@ -7238,6 +7407,8 @@ class TauTuiApp(App[None]):
             credential_name=result.provider_name,
             models=result.models,
             default_model=result.default_model,
+            model_discovery=result.model_discovery,
+            require_api_key=result.require_api_key,
         )
         catalog_entry = ProviderCatalogEntry(
             name=provider.name,
@@ -7249,10 +7420,13 @@ class TauTuiApp(App[None]):
             models=provider.models,
             default_model=provider.default_model,
             docs_url=provider.base_url,
+            model_discovery=result.model_discovery,
+            require_api_key=result.require_api_key,
         )
         try:
             save_user_catalog_entries((catalog_entry,))
-            FileCredentialStore().set(provider.credential_name or provider.name, result.api_key)
+            if result.api_key:
+                FileCredentialStore().set(provider.credential_name or provider.name, result.api_key)
             settings = load_provider_settings()
             updated = upsert_openai_compatible_provider(settings, provider, set_default=False)
             save_provider_settings(updated)
@@ -7264,7 +7438,8 @@ class TauTuiApp(App[None]):
         except Exception as exc:  # noqa: BLE001 - surface login failures in the TUI
             self._notify(f"Could not save custom provider: {exc}", severity="error")
             return
-        self._notify(f"Saved custom provider {result.display_name}.")
+        kind = "custom provider" if result.require_api_key else "local server provider"
+        self._notify(f"Saved {kind} {result.display_name}.")
         self._refresh()
 
     def _open_login(self, provider_name: str, *, method: str | None = None) -> None:
@@ -8383,6 +8558,12 @@ def _named_session_title(title: str | None) -> str | None:
     if not stripped or stripped.lower() == "untitled session":
         return None
     return stripped
+
+
+def _derived_api_key_env(provider_name: str) -> str:
+    """Return a conventional environment-variable name for a provider."""
+    stem = "".join(ch if ch.isalnum() else "_" for ch in provider_name.upper()).strip("_")
+    return f"{stem or 'LOCAL'}_API_KEY"
 
 
 def _login_provider_label(provider: ProviderCatalogEntry) -> str:

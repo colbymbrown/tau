@@ -57,6 +57,7 @@ from tau_agent import (
 )
 from tau_agent.messages import assistant_content
 from tau_agent.provider_events import TextDeltaEvent, ThinkingDeltaEvent, ThinkingEndEvent
+from tau_ai.model_catalog import RuntimeModel, RuntimeModelCatalog
 from tau_coding.catalog_loader import user_catalog_path
 from tau_coding.commands import CommandResult
 from tau_coding.credentials import FileCredentialStore, OAuthCredential
@@ -81,6 +82,7 @@ from tau_coding.extensions import (
     OpenAICompatibleTransport,
     ProviderModel,
 )
+from tau_coding.local_server_presets import LOCAL_SERVER_PRESETS
 from tau_coding.paths import TauPaths
 from tau_coding.prompt_templates import PromptTemplate
 from tau_coding.provider_config import (
@@ -120,6 +122,7 @@ from tau_coding.tui.app import (
     ExtensionConfirmScreen,
     ExtensionInputScreen,
     ExtensionSelectScreen,
+    LocalServerPresetScreen,
     LoginMethodPickerScreen,
     LoginProviderPickerScreen,
     LoginScreen,
@@ -9773,6 +9776,121 @@ async def test_tui_login_custom_provider_opens_from_slash_command() -> None:
 
 
 @pytest.mark.anyio
+async def test_tui_local_server_flow_prefills_preset() -> None:
+    app = TauTuiApp(FakeSession())
+
+    async with app.run_test() as pilot:
+        app._handle_login_method_result("local")
+        await pilot.pause()
+        assert isinstance(app.screen, LocalServerPresetScreen)
+
+        app._handle_local_server_preset_result(LOCAL_SERVER_PRESETS[0])
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, CustomProviderLoginScreen)
+        assert screen.local_mode is True
+        assert screen.query_one("#custom-provider-name", Input).value == "ollama"
+        assert screen.query_one("#custom-provider-base-url", Input).value == (
+            "http://127.0.0.1:11434/v1"
+        )
+        assert screen.query_one("#custom-provider-api-key-env", Input).value == "OLLAMA_API_KEY"
+
+
+@pytest.mark.anyio
+async def test_tui_local_server_form_collects_keyless_discovery_provider() -> None:
+    app = TauTuiApp(FakeSession())
+
+    async with app.run_test() as pilot:
+        app._handle_login_method_result("local")
+        await pilot.pause()
+        app._handle_local_server_preset_result(LOCAL_SERVER_PRESETS[0])
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, CustomProviderLoginScreen)
+        # Models and API key are left blank for a keyless, discovery-driven server.
+        result = screen._collect_result()
+
+    assert result is not None
+    assert result.provider_name == "ollama"
+    assert result.models == ()
+    assert result.api_key == ""
+    assert result.model_discovery is True
+    assert result.require_api_key is False
+
+
+@pytest.mark.anyio
+async def test_tui_local_server_form_discovers_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = TauTuiApp(FakeSession())
+
+    class FakeDiscoveryProvider:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def discover_models(self) -> RuntimeModelCatalog:
+            return RuntimeModelCatalog((RuntimeModel(id="llama3.2"), RuntimeModel(id="qwen2.5")))
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    fake = FakeDiscoveryProvider()
+    monkeypatch.setattr(tui_app, "create_model_provider", lambda *_args, **_kwargs: fake)
+
+    async with app.run_test() as pilot:
+        app._handle_login_method_result("local")
+        await pilot.pause()
+        app._handle_local_server_preset_result(LOCAL_SERVER_PRESETS[0])
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, CustomProviderLoginScreen)
+        collected = screen._collect_result()
+        assert collected is not None
+        dismissed: list[CustomProviderLoginResult] = []
+        screen.dismiss = dismissed.append  # type: ignore[method-assign]
+        await screen._discover_models(collected)
+
+    assert [result.models for result in dismissed] == [("llama3.2", "qwen2.5")]
+    assert dismissed[0].default_model == "llama3.2"
+    assert fake.closed is True
+
+
+@pytest.mark.anyio
+async def test_tui_local_server_login_saves_keyless_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    isolate_home(monkeypatch, tmp_path)
+    session = FakeSession()
+    app = TauTuiApp(session)
+
+    async with app.run_test():
+        app._handle_custom_provider_login_result(
+            CustomProviderLoginResult(
+                provider_name="ollama",
+                display_name="Ollama",
+                base_url="http://127.0.0.1:11434/v1",
+                api_key_env="OLLAMA_API_KEY",
+                models=("llama3.2",),
+                default_model="llama3.2",
+                api_key="",
+                model_discovery=True,
+                require_api_key=False,
+            )
+        )
+
+    paths = TauPaths(home=tmp_path / ".tau")
+    catalog = user_catalog_path(paths).read_text(encoding="utf-8")
+    provider = tui_app.load_provider_settings(paths).get_provider("ollama")
+
+    assert "model_discovery = true" in catalog
+    assert "require_api_key = false" in catalog
+    assert isinstance(provider, OpenAICompatibleProviderConfig)
+    assert provider.model_discovery is True
+    assert provider.require_api_key is False
+    assert FileCredentialStore(paths.home / "credentials.json").get("ollama") is None
+    assert session.provider_name == "ollama"
+
+
+@pytest.mark.anyio
 async def test_tui_login_preserves_existing_scoped_models_and_providers(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -9965,6 +10083,7 @@ async def test_tui_login_opens_method_picker() -> None:
             "Subscription — OAuth account",
             "API key — built-in provider",
             "Custom provider — OpenAI-compatible",
+            "Local server — keyless OpenAI-compatible",
         ]
         assert app.screen.focused is method_list
         assert method_list.index == 0

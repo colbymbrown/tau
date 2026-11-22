@@ -92,6 +92,7 @@ class ProviderCatalogEntry:
     removed_models: tuple[str, ...] = ()
     auth_methods: tuple[AuthMethod, ...] = ("api_key",)
     model_discovery: bool = False
+    require_api_key: bool = True
 
 
 def _load_builtin_catalog() -> tuple[ProviderCatalogEntry, ...]:

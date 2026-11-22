@@ -78,9 +78,16 @@ mutation. User/project dynamic providers cannot persist scoped references.
 
 Other OpenAI-compatible endpoints can still be configured with `/login custom`,
 `tau setup`, or a user-level `~/.tau/catalog.toml` entry. That path is useful for
-Ollama, gateways, and older manually configured local providers. An existing
-provider named `llama-cpp` remains distinct from the built-in `llama.cpp`; Tau
-does not migrate or overwrite it.
+gateways and older manually configured local providers.
+
+For keyless local servers, `/login` → **Local server** lists templates (Ollama,
+LM Studio, vLLM, Unsloth, llama.cpp server) that pre-fill the OpenAI-compatible
+form with the server's default endpoint and enable runtime model discovery.
+Leave the model field blank to probe `{base_url}/models` on save. The API key is
+optional and, when absent, Tau sends no `Authorization` header. These are login
+templates, not managed backends: Tau never installs, starts, stops, or scans the
+server. An existing provider named `llama-cpp` remains distinct from the
+built-in `llama.cpp`; Tau does not migrate or overwrite it.
 
 ## Metadata and selection rules
 
