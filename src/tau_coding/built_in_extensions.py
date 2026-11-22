@@ -94,40 +94,6 @@ def _llama_cpp_setup_with_context(
     setup(api, context)
 
 
-def _local_servers_setup(api: ExtensionAPI) -> None:
-    """Load the product extension with its normal process dependencies."""
-    from tau_coding.extensions.builtins.local_servers import setup
-
-    setup(api)
-
-
-def _local_servers_setup_with_context(
-    api: ExtensionAPI,
-    context: BuiltInExtensionContext,
-) -> None:
-    """Load the product extension lazily with trusted runtime dependencies."""
-    from tau_coding.extensions.builtins.local_servers import setup
-
-    setup(api, context)
-
-
-def _ollama_setup(api: ExtensionAPI) -> None:
-    """Load the product extension with its normal process dependencies."""
-    from tau_coding.extensions.builtins.ollama import setup
-
-    setup(api)
-
-
-def _ollama_setup_with_context(
-    api: ExtensionAPI,
-    context: BuiltInExtensionContext,
-) -> None:
-    """Load the product extension lazily with trusted runtime dependencies."""
-    from tau_coding.extensions.builtins.ollama import setup
-
-    setup(api, context)
-
-
 # Product capabilities are declared explicitly so filesystem discovery or
 # project inputs cannot change what Tau treats as trusted.
 BUILT_IN_EXTENSIONS: tuple[BuiltInExtension, ...] = (
@@ -136,18 +102,6 @@ BUILT_IN_EXTENSIONS: tuple[BuiltInExtension, ...] = (
         setup=_llama_cpp_setup,
         hidden=True,
         setup_with_context=_llama_cpp_setup_with_context,
-    ),
-    BuiltInExtension(
-        name="local-servers",
-        setup=_local_servers_setup,
-        hidden=True,
-        setup_with_context=_local_servers_setup_with_context,
-    ),
-    BuiltInExtension(
-        name="ollama",
-        setup=_ollama_setup,
-        hidden=True,
-        setup_with_context=_ollama_setup_with_context,
     ),
 )
 
